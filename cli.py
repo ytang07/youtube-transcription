@@ -1,7 +1,6 @@
 import click
 import requests
 import youtube_dl
-from threading import Thread
 from time import sleep
 from configure import auth_key
 
