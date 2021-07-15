@@ -1,6 +1,7 @@
 import click
 import requests
 import youtube_dl
+import pprint
 from time import sleep
 from configure import auth_key
 
@@ -30,7 +31,6 @@ CHUNK_SIZE = 5242880
 def apis():
     """A CLI for getting transcriptions of YouTube videos"""
 
-# @click.option('-l', '--link', help='Link to YouTube video')
 @click.argument('link')
 @apis.command()
 def download(link):
@@ -56,10 +56,10 @@ def upload(filename):
         headers=headers_auth_only, data=read_file(filename)
     )
     print(upload_response.json())
-    return upload_response.json()['audio_url']
+    return upload_response.json()['upload_url']
 
 @click.argument('audio_url')
-@click.option('-c', '--categories', is_flag=True, help="Pass True if you want to get the categories of this transcript back")
+@click.option('-c', '--categories', is_flag=True, help="Pass if you want to get the categories of this transcript back")
 @apis.command()
 def transcribe(audio_url, categories: bool):
 
@@ -69,27 +69,17 @@ def transcribe(audio_url, categories: bool):
     }
 
     transcript_response = requests.post(transcript_endpoint, json=transcript_request, headers=headers)
-    print(transcript_response.json())
+    pprint.pprint(transcript_response.json())
     return transcript_response.json()['id']
 
 @click.argument('transcript_id')
-@click.option('-a', '--auto', help="Automate polling with this many seconds between each poll")
 @apis.command()
-def poll(transcript_id, auto: int):
+def poll(transcript_id):
     polling_endpoint = transcript_endpoint + "/" + transcript_id
     polling_response = requests.get(polling_endpoint, headers=headers)
     filename = transcript_id + '.txt'
-    if auto:
-        while polling_response.json()['status'] != 'completed':
-            sleep(auto)
-            polling_response = requests.get(polling_endpoint, headers=headers)
-            print("Waiting", auto)
-        with open(filename, 'w') as f:
-            f.write(polling_response.json()['text'])
-        print('Transcript saved to' + filename)
-        return filename
     if polling_response.json()['status'] != 'completed':
-        print(polling_response.json())
+        pprint.pprint(polling_response.json())
     else:
         with open(filename, 'w') as f:
             f.write(polling_response.json()['text'])
@@ -132,9 +122,18 @@ def transcribe_from_link(link, categories: bool):
     polling_endpoint = transcript_endpoint + "/" + transcript_id
     print("Transcribing at", polling_endpoint)
     polling_response = requests.get(polling_endpoint, headers=headers)
-    print("Expected wait time:", duration*2/5, "seconds")
-    print("After wait time is up, call poll with id", transcript_id)
-    return transcript_id
+    while polling_response.json()['status'] != 'completed':
+        sleep(30)
+        try:
+            polling_response = requests.get(polling_endpoint, headers=headers)
+        except:
+            print("Expected wait time:", duration*2/5, "seconds")
+            print("After wait time is up, call poll with id", transcript_id)
+            return transcript_id
+    _filename = transcript_id + '.txt'
+    with open(_filename, 'w') as f:
+        f.write(polling_response.json()['text'])
+    print('Transcript saved to', _filename)
 
 def main():
     apis(prog_name='apis')
